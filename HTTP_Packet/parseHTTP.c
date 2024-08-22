@@ -9,74 +9,43 @@
 #include <arpa/inet.h>
 #include <pcap.h>
 #include <netinet/in.h> 
-#include <linux/if_ether.h> // Add this line to include the header file that defines "ETH_P_ALL
+#include <linux/if_ether.h> 
 
+#include "packet_header.h"
 #define SIZE_ETHERNET 14
-struct ethernetHeader {
-    unsigned char dest[6];
-    unsigned char src[6];
-    unsigned short type;
-};
-
-struct ipHeader {
-    unsigned char iph_ihl:4, iph_ver:4;
-    unsigned char  iph_tos;
-    unsigned short iph_len;
-    unsigned short iph_ident;
-    unsigned short iph_offset;
-    unsigned char  iph_ttl;
-    unsigned char  iph_protocol;
-    unsigned short iph_chksum;
-    struct in_addr iph_sourceip;
-    struct in_addr iph_destip;
-};
-
-struct tcpHeader{
-    unsigned short tcph_srcport;
-    unsigned short tcph_destport;
-    unsigned int tcph_seqnum;
-    unsigned int tcph_acknum;
-    unsigned char tcph_reserved:4, tcph_offset:4;
-    unsigned char tcph_flags;
-    unsigned short tcph_win;
-    unsigned short tcph_chksum;
-    unsigned short tcph_urgptr;
-};
 
 int count = 1;
-
 char *get_header_value(const char *response, const char *header_name) {
     char *header_start = strstr(response, header_name);
     if (header_start == NULL) {
         return NULL;
     }
 
-    // Tìm dấu ":" sau tên header
+    // Find start of content in header
     char *value_start = strstr(header_start, ": ");
     if (value_start == NULL) {
         return NULL;
     }
 
-    // Bỏ qua dấu ": " để đến giá trị
+    // Skip ": " to get to the value
     value_start += 2;
 
-    // Tìm vị trí kết thúc của header (tức là tìm vị trí xuống dòng "\r\n")
+    // Find end of header
     char *value_end = strstr(value_start, "\r\n");
     if (value_end == NULL) {
         return NULL;
     }
 
-    // Tính độ dài giá trị header
+    // Length of content in header
     size_t value_length = value_end - value_start;
 
-    // Tạo một chuỗi mới để lưu giá trị của header
+    // Store in a string
     char *header_value = (char *)malloc(value_length + 1);
     if (header_value == NULL) {
         perror("Malloc failed");
         exit(EXIT_FAILURE);
     }
-    strncpy(header_value, value_start, value_length);
-    header_value[value_length] = '\0';
+    snprintf(header_value, value_length + 1, "%s", value_start);
 
     return header_value;
 }
@@ -87,29 +56,36 @@ void parse_http_response(const char *response) {
         printf("Invalid HTTP response: no status line found\n");
         return;
     }
-
-    // In ra dòng trạng thái (status line)
+    // Print status line
     printf("Status Line: %.*s\n", (int)(status_line_end - response), response);
 
-    // Tìm phần body của HTTP response
-    char *body_start = strstr(response, "\r\n\r\n");
-    if (body_start != NULL) {
-        body_start += 4;  // Bỏ qua "\r\n\r\n" để đến phần body
-        printf("Body:\n%s\n", body_start);
-    }
-
-    // Lấy một số header cụ thể (ví dụ: Content-Type, Content-Length)
+    // Find some in4 about HTTP
     char *content_type = get_header_value(response, "Content-Type");
     if (content_type != NULL) {
         printf("Content-Type: %s\n", content_type);
         free(content_type);
     }
-
     char *content_length = get_header_value(response, "Content-Length");
     if (content_length != NULL) {
         printf("Content-Length: %s\n", content_length);
         free(content_length);
     }
+    char *date = get_header_value(response, "Date");
+    if (date != NULL) {
+        printf("Date: %s\n", date);
+        free(date);
+    }
+    char *last_modified = get_header_value(response, "Last-Modified");
+    if (last_modified != NULL) {
+        printf("Last-Modified: %s\n", last_modified);
+        free(last_modified);
+    }
+    // Find body of HTTP response
+    char *body_start = strstr(response, "\r\n\r\n");
+    if (body_start != NULL) {
+        body_start += 4;  // Skip "\r\n\r\n" to get to the body
+        printf("Body:\n%s\n", body_start);
+    } 
 }
 
 void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const unsigned char *packet){
@@ -122,9 +98,9 @@ void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const uns
 
     size_t tcp_len = (tcp->tcph_offset) * 4;
     unsigned char *payload = (unsigned char *)(packet + 14 + ip_len + tcp_len);
+    int payload_len = ntohs(ip->iph_len) - (ip_len + tcp_len);
 
     printf("\nPacket number %d:\n", count++);
-
     printf("Source MAC: ");
     for(int i = 0; i < 6; i++){
         printf("%02x", eth->src[i]);
@@ -154,7 +130,10 @@ void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const uns
     int tcp_ack = ntohl(tcp->tcph_acknum);
     printf("Acknowledge number: %d\n", tcp_ack);
 
-    parse_http_response((const char *)payload);
+    if(payload_len > 0){
+        printf("\nHTTP content:\n");
+        parse_http_response(payload);
+    }
     printf("\nEnd of packet\n");
 }
 int main(){
