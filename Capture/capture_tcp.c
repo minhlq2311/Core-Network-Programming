@@ -12,7 +12,7 @@
 #include <linux/if_ether.h> 
 
 #define SIZE_ETHERNET 14
-#include "packet_header.h"
+#include "/home/minhlq2311/Documents/Core Net 2.0/packet_header.h"
 
 int count = 1;
 void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const unsigned char *packet){

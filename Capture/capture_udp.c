@@ -12,24 +12,23 @@
 #include <linux/if_ether.h> 
 
 #define SIZE_ETHERNET 14
-
 #include "/home/minhlq2311/Documents/Core Net 2.0/packet_header.h"
 
 int count = 1;
+
 void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const unsigned char *packet){
     struct ethernetHeader *eth = (struct ethernetHeader *)packet;
 
     struct ipHeader *ip = (struct ipHeader *)(packet + SIZE_ETHERNET);
 
     size_t ip_len = (ip->iph_ihl) * 4;
-    struct icmpHeader *icmp = (struct icmpHeader *)(packet + 14 + ip_len);
+    struct udpHeader *udp = (struct udpHeader *)(packet + 14 + ip_len);
 
-    size_t icmp_len = 8;
-    unsigned char payload = (unsigned char *)(packet + 14 + ip_len + icmp_len);
+    size_t udp_len = 8;
+    unsigned char *payload = (unsigned char *)(packet + 14 + ip_len + udp_len);
 
     printf("\nPacket number %d:\n", count++);
 
-    printf("\nEthernet Header: \n");
     printf("Source MAC: ");
     for(int i = 0; i < 6; i++){
         printf("%02x", eth->src[i]);
@@ -48,17 +47,13 @@ void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const uns
     }
     printf("\n");
 
-    printf("\nIP Header: \n");
     printf("Source IP: %s\n", inet_ntoa(ip->iph_sourceip));
     printf("Destination IP: %s\n", inet_ntoa(ip->iph_destip));
 
-    printf("\nICMP Header: \n");
+    printf("Source Port: %d\n", ntohs(udp->udph_srcport));
+    printf("Destination Port: %d\n", ntohs(udp->udph_destport));
+    printf("Length: %d\n", ntohs(udp->udph_len));
 
-    printf("ICMP Type: %d\n", icmp->icmp_type);
-    printf("ICMP Code: %d\n", icmp->icmp_code);
-    printf("ICMP Checksum: %d\n", icmp->icmp_chksum);
-    printf("ICMP ID: %d\n", icmp->id);
-    printf("ICMP Sequence: %d\n", icmp->seq);
 
     printf("\nEnd of packet\n");
 }
@@ -73,7 +68,7 @@ int main(){
         return(2);
     }
 
-    // Open session
+    // Open the session 
     pcap_t *handle = NULL;
     handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
     if (handle == NULL) {
@@ -88,7 +83,7 @@ int main(){
     }
 
     struct bpf_program fp;
-    char filter_exp[] = "icmp";
+    char filter_exp[] = "udp port 53";
     bpf_u_int32 net;
     bpf_u_int32 mask;
 

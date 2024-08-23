@@ -1,5 +1,6 @@
 #include <netinet/ip.h>
-
+#include <netinet/tcp.h> 
+#include <netinet/in.h> 
 struct ethernetHeader {
     unsigned char dest[6];
     unsigned char src[6];
@@ -31,10 +32,17 @@ struct tcpHeader{
     unsigned short tcph_urgptr;
 };
 
+struct udpHeader{
+    unsigned short udph_srcport;
+    unsigned short udph_destport;
+    unsigned short udph_len;
+    unsigned short udph_chksum;
+};
+
 struct icmpHeader{
     unsigned char icmp_type;
     unsigned char icmp_code;
     unsigned short icmp_chksum;
-    unsigned short icmp_id;
-    unsigned short icmp_seq;
+    unsigned short id;
+    unsigned short seq;
 };
