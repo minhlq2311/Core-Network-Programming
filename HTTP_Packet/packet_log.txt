@@ -1,0 +1,208 @@
+
+Packet number 1:
+Time: 2024-09-03 15:12:08
+Source MAC: 08:00:27:a4:41:96
+Destination MAC: 52:54:00:12:35:02
+Source IP: 10.0.2.15
+Destination IP: 93.184.215.14
+Source Port: 12345
+Destination Port: 80
+Sequence number: 1804289383
+Acknowledge number: 0
+
+This is SYN packet
+
+End of packet
+
+Packet number 2:
+Time: 2024-09-03 15:12:08
+Source MAC: 52:54:00:12:35:02
+Destination MAC: 08:00:27:a4:41:96
+Source IP: 93.184.215.14
+Destination IP: 10.0.2.15
+Source Port: 80
+Destination Port: 12345
+Sequence number: 602368001
+Acknowledge number: 1804289384
+
+This is SYN-ACK packet
+
+End of packet
+
+Packet number 3:
+Time: 2024-09-03 15:12:08
+Source MAC: 08:00:27:a4:41:96
+Destination MAC: 52:54:00:12:35:02
+Source IP: 10.0.2.15
+Destination IP: 93.184.215.14
+Source Port: 12345
+Destination Port: 80
+Sequence number: 1804289384
+Acknowledge number: 602368002
+
+This is ACK packet
+
+End of packet
+
+Packet number 4:
+Time: 2024-09-03 15:12:08
+Source MAC: 08:00:27:a4:41:96
+Destination MAC: 52:54:00:12:35:02
+Source IP: 10.0.2.15
+Destination IP: 93.184.215.14
+Source Port: 12345
+Destination Port: 80
+Sequence number: 1804289384
+Acknowledge number: 0
+
+HTTP content:
+Status Line: GET / HTTP/1.1
+Body:
+
+
+End of packet
+
+Packet number 5:
+Time: 2024-09-03 15:12:08
+Source MAC: 52:54:00:12:35:02
+Destination MAC: 08:00:27:a4:41:96
+Source IP: 93.184.215.14
+Destination IP: 10.0.2.15
+Source Port: 80
+Destination Port: 12345
+Sequence number: 602368002
+Acknowledge number: 1804289421
+
+This is ACK packet
+
+End of packet
+
+Packet number 6:
+Time: 2024-09-03 15:12:08
+Source MAC: 52:54:00:12:35:02
+Destination MAC: 08:00:27:a4:41:96
+Source IP: 93.184.215.14
+Destination IP: 10.0.2.15
+Source Port: 80
+Destination Port: 12345
+Sequence number: 602368002
+Acknowledge number: 1804289421
+
+HTTP content:
+Status Line: HTTP/1.1 200 OK
+Content-Type: text/html; charset=UTF-8
+Content-Length: 1256
+Date: Tue, 03 Sep 2024 08:12:07 GMT
+Last-Modified: Thu, 17 Oct 2019 07:18:26 GMT
+Body:
+<!doctype html>
+<html>
+<head>
+    <title>Example Domain</title>
+
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type="text/css">
+    body {
+        background-color: #f0f0f2;
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        
+    }
+    div {
+        width: 600px;
+        margin: 5em auto;
+        padding: 2em;
+        background-color: #fdfdff;
+        border-radius: 0.5em;
+        box-shadow: 2px 3px 7px 2px rgba(0,0,0,0.02);
+    }
+    a:link, a:visited {
+        color: #38488f;
+        text-decoration: none;
+    }
+    @media (max-width: 700px) {
+        div {
+            margin: 0 auto;
+            width: auto;
+        }
+    }
+    </style>    
+</head>
+
+<body>
+<div>
+    <h1>Example Domain</h1>
+    <p>This domain is for use in illustrative examples in documents. You may use this
+    domain in literature without prior coordination or asking for permission.</p>
+    <p><a href="https://www.iana.org/domains/example">More information...</a></p>
+</div>
+</body>
+</html>
+
+
+End of packet
+
+Packet number 7:
+Time: 2024-09-03 15:12:09
+Source MAC: 52:54:00:12:35:02
+Destination MAC: 08:00:27:a4:41:96
+Source IP: 93.184.215.14
+Destination IP: 10.0.2.15
+Source Port: 80
+Destination Port: 12345
+Sequence number: 602368002
+Acknowledge number: 1804289421
+
+HTTP content:
+Status Line: HTTP/1.1 200 OK
+Content-Type: text/html; charset=UTF-8
+Content-Length: 1256
+Date: Tue, 03 Sep 2024 08:12:07 GMT
+Last-Modified: Thu, 17 Oct 2019 07:18:26 GMT
+Body:
+<!doctype html>
+<html>
+<head>
+    <title>Example Domain</title>
+
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type="text/css">
+    body {
+        background-color: #f0f0f2;
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        
+    }
+    div {
+        width: 600px;
+        margin: 5em auto;
+        padding: 2em;
+        background-color: #fdfdff;
+        border-radius: 0.5em;
+        box-shadow: 2px 3px 7px 2px rgba(0,0,0,0.02);
+    }
+    a:link, a:visited {
+        color: #38488f;
+        text-decoration: none;
+    }
+    @media (max-width: 700px) {
+        div {
+            margin: 0 auto;
+            width: auto;
+        }
+    }
+    </style>    
+</head>
+
+<body>
+<div>
+    <h1>Example Domain</h1>
+    <p>This domain is for use in illustrative examples in documents. You may use thi
+
+End of packet
