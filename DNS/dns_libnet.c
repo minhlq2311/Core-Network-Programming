@@ -114,10 +114,11 @@ int main(){
     char *domainName = malloc(100);
     if (domainName == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
-        libnet_destroy(l);
         exit(EXIT_FAILURE);
     }
-    snprintf(domainName, 100, "google.com");
+
+    printf("Enter domain name: ");
+    scanf("%99s", domainName); // read directly into domainName
 
     int srcPort = 12345;
     int destPort = 53;
