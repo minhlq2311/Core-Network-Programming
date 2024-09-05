@@ -10,6 +10,26 @@
 
 #define unsgined char u_char;
 
+void createIcmpHeader(libnet_t *l, char *data, int dataLen) {
+    libnet_ptag_t icmpTag;
+    icmpTag = libnet_build_icmpv4_echo(
+        ICMP_ECHO, // type
+        0,  // code
+        0, // checksum 
+        12345, // ID
+        0,  // sequence
+        data, 
+        dataLen, 
+        l, //libnet context
+        0 //ptag
+    );
+
+    if (icmpTag == -1) {
+        fprintf(stderr, "Error building ICMP header: %s\n", libnet_geterror(l));
+        libnet_destroy(l);
+        exit(EXIT_FAILURE);
+    }
+}
 int main() {
     libnet_t *l;
     libnet_ptag_t ipTag, icmpTag;
@@ -26,18 +46,6 @@ int main() {
      
     char *srcIp = "10.0.2.15";
     char *destIp = "8.8.8.8";
-
-    icmpTag = libnet_build_icmpv4_echo(
-        ICMP_ECHO, // type
-        0,  // code
-        0, // checksum 
-        12345, // ID
-        0,  // sequence
-        data, 
-        dataLen, 
-        l, //libnet context
-        0 //ptag
-    );
 
     if (icmpTag == -1) {
         fprintf(stderr, "Error building ICMP header: %s\n", libnet_geterror(l));
