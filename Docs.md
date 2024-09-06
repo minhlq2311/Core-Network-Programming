@@ -1,8 +1,18 @@
 # Raw Socket
-## Definition
-Raw socket is a low-level socket that allow direct access to lower layer network protocol, like TCP, IP protocol, ...
+## 1. Introduction
+Raw socket is a low-level socket that allow direct access to lower-layer network protocol, like TCP, IP protocol, ... It enable you to manually craft packets, bypassing the OS's built-in protocol stack. This gives developers the ability to manipulate protocol headers, craft custom packets, and access network traffic at a granular level.
 
-## Different between raw socket and normal socket
+## 2. How Raw Sockets Work
+Raw sockets provide direct access to the network layer (OSI Layer 3) or data link layer (OSI Layer 2) depending on the socket type. By doing this, the OS doesn't automatically add protocol headers like TCP, UDP, or IP headers, allowing you to control packet construction.
+
+The two types of raw sockets are:
+
+- AF_INET (IP-based): Allows access to raw IP packets.
+- AF_PACKET (Link Layer): Allows access to the entire Ethernet frame, including the data link layer headers (Ethernet, ARP).
+
+Raw sockets require root or administrator privileges on most systems due to the security implications of sending and receiving crafted packets.
+
+## 3. Different between raw socket and normal socket
 
 - Other sockets like stream sockets and data gram sockets receive data from the transport layer that contains no headers but only the payload. This means that there is no information about the source IP address and MAC address. If applications running on the same machine or on different machines are communicating, then they are only exchanging data.
 
@@ -10,7 +20,8 @@ Raw socket is a low-level socket that allow direct access to lower layer network
 - On the other hand, a raw socket allows an application to directly access lower level protocols, which means a raw socket receives un-extracted packets.
 
 ![example](anh.png)
-## Functionality
+
+## 4. Functionality
 
 Raw Socket are using for several purpose:
 
@@ -18,7 +29,7 @@ Raw Socket are using for several purpose:
 2. **Packet Sniffing:** Capture and analyze network traffic for monitoring and debugging purposes.
 3. **Network Diagnostics and Testing:** Create network diagnostic tools that test various aspects of network communication. Tools like ping and traceroute use raw sockets to send ICMP packets and analyze responses to diagnose network connectivity and latency issues
 
-### Usage
+### 5. Usage
 1. Create a packet with raw socket
 
 1.1 At the Network Layer
@@ -81,17 +92,26 @@ void send_packet(int sock, char *packet, int packet_len) {
     }
 }
 ```
+3. Receive data
+```c
+char buffer[65535];
+int recv_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
+if (recv_len < 0) {
+    perror("Receive failed");
+}
+```
 
-### Note
+### 6. Note
 1. **Access Rights**
 - Since i'm using in Linux, always have to run with root
   > sudo ./your_program
 
-2. **Abuse**
-Raw sockets can be used to create network attacks such as IP spoofing or DoS attacks.
+2. **Potential Misuse:** Malicious actors can use raw sockets to perform attacks like IP spoofing, DoS (Denial of Service), and packet injection.
 
-### References
-- https://www.baeldung.com/cs/raw-sockets
-- https://www.opensourceforu.com/2015/03/a-guide-to-using-raw-sockets/
-- https://tuprints.ulb.tu-darmstadt.de/6243/1/TR-18.pdf
+3. **Monitoring:** Systems that use raw sockets for packet injection may be flagged by intrusion detection systems (IDS) or other security tools
+
+### 7. References
+- [What Are Raw Sockets? | Baeldung on Computer Science ](https://www.baeldung.com/cs/raw-sockets)
+- [A Guide to Using Raw Sockets](https://www.opensourceforu.com/2015/03/a-guide-to-using-raw-sockets/)
+- [Introduction to RAW-sockets - TUprints.pdf](https://tuprints.ulb.tu-darmstadt.de/6243/1/TR-18.pdf)
 
