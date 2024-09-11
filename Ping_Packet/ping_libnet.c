@@ -13,7 +13,7 @@
 #include <ifaddrs.h>
 
 int isHost = -1;
-
+#include "../packet_header.h"
 // Get the first Ip address of the network interface
 char* get_local_ip() {
     struct ifaddrs *ifaddr, *ifa;
@@ -146,15 +146,15 @@ void receive_icmp_response(int sockfd) {
     
     int bytesReceived = recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr *)&addr, &addr_len);
     if (bytesReceived > 0) {
-        struct ip *ipHeader = (struct ip *)buf;
-        int ipHeaderLen = ipHeader->ip_hl * 4;
+        struct ipHeader *ipHeader = (struct ipHeader *)buf;
+        int ipHeaderLen = ipHeader->iph_ihl * 4;
 
         struct icmphdr *icmpHeader = (struct icmphdr *)(buf + ipHeaderLen);
         int icmpHeaderLen = sizeof(struct icmphdr);
         int icmpDataLen = bytesReceived - ipHeaderLen - icmpHeaderLen;
 
         if (icmpHeader->type == ICMP_ECHOREPLY) {
-            printf("Reply from %s: bytes=%d TTL=%d\n", inet_ntoa(addr.sin_addr), icmpDataLen, ipHeader->ip_ttl);
+            printf("Reply from %s: bytes=%d TTL=%d\n", inet_ntoa(addr.sin_addr), icmpDataLen, ipHeader->iph_ttl);
         } else {
             printf("Received ICMP packet of type %d\n", icmpHeader->type);
         }
@@ -191,7 +191,7 @@ char *resolve_ip_to_hostname(const char *ip_addr) {
     
     char host[1024];
     char service[20];
-    
+
     int res = getnameinfo((struct sockaddr*)&sa, sizeof(sa), host, sizeof(host), service, sizeof(service), 0);
     if (res != 0) {
         return NULL;  // Cant resolve
