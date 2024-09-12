@@ -11,34 +11,54 @@
 #include <signal.h>
 #include <netdb.h>
 #include <ifaddrs.h>
+#include <net/if.h>
+
+#include "../packet_header.h"
 
 int isHost = -1;
-#include "../packet_header.h"
-// Get the first Ip address of the network interface
+
+// Get the first IP address of availble network interfaces
 char* get_local_ip() {
     struct ifaddrs *ifaddr, *ifa;
     char *ip_addr = NULL;
+
+    // Get the list of network interfaces
     if (getifaddrs(&ifaddr) == -1) {
         perror("getifaddrs");
         exit(EXIT_FAILURE);
     }
     
+    // Loop through the list of network interfaces
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == NULL) continue;
+
+        // Check if the interface is an IPv4 address
         if (ifa->ifa_addr->sa_family == AF_INET) {
+            // Skip the loopback interface
+            if (strcmp(ifa->ifa_name, "lo") == 0) 
+                continue;
+            // Check if the interface is UP
+            if (!(ifa->ifa_flags & IFF_UP)) 
+                continue; 
+            // Check if the interface is RUNNING
+            if (!(ifa->ifa_flags & IFF_RUNNING)) 
+                continue; 
+
+            // Create a buffer to store the IP address
             ip_addr = malloc(INET_ADDRSTRLEN);
             if (ip_addr == NULL) {
                 perror("malloc");
                 exit(EXIT_FAILURE);
             }
+
+            // Convert the IP address to a readable string
             inet_ntop(AF_INET, &((struct sockaddr_in *)ifa->ifa_addr)->sin_addr, ip_addr, INET_ADDRSTRLEN);
-            if (strcmp(ifa->ifa_name, "lo") != 0) { // Avoid using loopback interface
-                break;
-            }
-            free(ip_addr);
-            ip_addr = NULL;
+
+            // Break the loop if we find the first IP address
+            break;
         }
     }
+
     freeifaddrs(ifaddr);
     return ip_addr;
 }
