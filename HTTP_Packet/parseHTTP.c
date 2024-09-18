@@ -11,12 +11,13 @@
 #include <netinet/in.h> 
 #include <linux/if_ether.h> 
 #include <time.h>  // Include time.h for timestamp
-
-#include "/home/minhlq2311/Documents/CoreNetwork/Core-Network-Programming/packet_header.h"
+#include <signal.h>  // Include signal.h for signal handling
+#include "../packet_header.h"
 #define SIZE_ETHERNET 14
 
 int count = 1;
 FILE *log_file = NULL;
+pcap_t *handle;
 
 char *get_header_value(const char *response, const char *header_name) {
     char *header_start = strstr(response, header_name);
@@ -61,18 +62,21 @@ void parse_http_response(const char *response) {
         fprintf(log_file, "Content-Type: %s\n", content_type);
         free(content_type);
     }
+
     char *content_length = get_header_value(response, "Content-Length");
     if (content_length != NULL) {
         printf("Content-Length: %s\n", content_length);
         fprintf(log_file, "Content-Length: %s\n", content_length);
         free(content_length);
     }
+
     char *date = get_header_value(response, "Date");
     if (date != NULL) {
         printf("Date: %s\n", date);
         fprintf(log_file, "Date: %s\n", date);
         free(date);
     }
+
     char *last_modified = get_header_value(response, "Last-Modified");
     if (last_modified != NULL) {
         printf("Last-Modified: %s\n", last_modified);
@@ -82,13 +86,17 @@ void parse_http_response(const char *response) {
 
     char *body_start = strstr(response, "\r\n\r\n");
     if (body_start != NULL) {
-        body_start += 4;
-        printf("Body:\n%s\n", body_start);
-        fprintf(log_file, "Body:\n%s\n", body_start);
-    } 
+        body_start += 4; // Skip the header
+        if (*body_start != '\0') { // Check if the body is not empty
+            printf("Body:\n%s\n", body_start);
+            fprintf(log_file, "Body:\n%s\n", body_start);
+        }
+    }
 }
 
+
 void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const unsigned char *packet) {
+    // Get the current time
     time_t raw_time;
     struct tm *time_info;
     char time_buffer[80];
@@ -97,13 +105,14 @@ void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const uns
     time_info = localtime(&raw_time);
     strftime(time_buffer, 80, "%Y-%m-%d %H:%M:%S", time_info);
 
-    struct ethernetHeader *eth = (struct ethernetHeader *)packet;
-    struct ipHeader *ip = (struct ipHeader *)(packet + SIZE_ETHERNET);
-    size_t ip_len = (ip->iph_ihl) * 4;
-    struct tcpHeader *tcp = (struct tcpHeader *)(packet + 14 + ip_len);
-    size_t tcp_len = (tcp->tcph_offset) * 4;
-    unsigned char *payload = (unsigned char *)(packet + 14 + ip_len + tcp_len);
-    int payload_len = ntohs(ip->iph_len) - (ip_len + tcp_len);
+    // Parse the packet
+    struct ethhdr *eth = (struct ethhdr *)packet;
+    struct iphdr *ip = (struct iphdr *)(packet + SIZE_ETHERNET);
+    size_t ip_len = ip->ihl * 4;
+    struct tcphdr *tcp = (struct tcphdr *)(packet + SIZE_ETHERNET + ip_len);
+    size_t tcp_len = tcp->doff * 4;
+    unsigned char *payload = (unsigned char *)(packet + SIZE_ETHERNET + ip_len + tcp_len);
+    int payload_len = ntohs(ip->tot_len) - (ip_len + tcp_len);
 
     printf("\nPacket number %d:\n", count);
     printf("Time: %s\n", time_buffer);
@@ -113,8 +122,8 @@ void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const uns
     printf("Source MAC: ");
     fprintf(log_file, "Source MAC: ");
     for(int i = 0; i < 6; i++){
-        printf("%02x", eth->src[i]);
-        fprintf(log_file, "%02x", eth->src[i]);
+        printf("%02x", eth->h_source[i]);
+        fprintf(log_file, "%02x", eth->h_source[i]);
         if(i < 5){
             printf(":");
             fprintf(log_file, ":");
@@ -126,8 +135,8 @@ void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const uns
     printf("Destination MAC: ");
     fprintf(log_file, "Destination MAC: ");
     for(int i = 0; i < 6; i++){
-        printf("%02x", eth->dest[i]);
-        fprintf(log_file, "%02x", eth->dest[i]);
+        printf("%02x", eth->h_dest[i]);
+        fprintf(log_file, "%02x", eth->h_dest[i]);
         if(i < 5){
             printf(":");
             fprintf(log_file, ":");
@@ -136,41 +145,27 @@ void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const uns
     printf("\n");
     fprintf(log_file, "\n");
 
-    printf("Source IP: %s\n", inet_ntoa(ip->iph_sourceip));
-    fprintf(log_file, "Source IP: %s\n", inet_ntoa(ip->iph_sourceip));
-    printf("Destination IP: %s\n", inet_ntoa(ip->iph_destip));
-    fprintf(log_file, "Destination IP: %s\n", inet_ntoa(ip->iph_destip));
+    printf("Source IP: %s\n", inet_ntoa(*(struct in_addr *)&ip->saddr));
+    fprintf(log_file, "Source IP: %s\n", inet_ntoa(*(struct in_addr *)&ip->saddr));
+    printf("Destination IP: %s\n", inet_ntoa(*(struct in_addr *)&ip->daddr));
+    fprintf(log_file, "Destination IP: %s\n", inet_ntoa(*(struct in_addr *)&ip->daddr));
 
-    printf("Source Port: %d\n", ntohs(tcp->tcph_srcport));
-    fprintf(log_file, "Source Port: %d\n", ntohs(tcp->tcph_srcport));
-    printf("Destination Port: %d\n", ntohs(tcp->tcph_destport));
-    fprintf(log_file, "Destination Port: %d\n", ntohs(tcp->tcph_destport));
+    printf("Source Port: %d\n", ntohs(tcp->source));
+    fprintf(log_file, "Source Port: %d\n", ntohs(tcp->source));
+    printf("Destination Port: %d\n", ntohs(tcp->dest));
+    fprintf(log_file, "Destination Port: %d\n", ntohs(tcp->dest));
 
-    int tcp_seq = ntohl(tcp->tcph_seqnum);
-    printf("Sequence number: %d\n", tcp_seq);
-    fprintf(log_file, "Sequence number: %d\n", tcp_seq);
-    int tcp_ack = ntohl(tcp->tcph_acknum);
-    printf("Acknowledge number: %d\n", tcp_ack);
-    fprintf(log_file, "Acknowledge number: %d\n", tcp_ack);
+    unsigned int tcp_seq = ntohl(tcp->seq);
+    printf("Sequence number: %u\n", tcp_seq);
+    fprintf(log_file, "Sequence number: %u\n", tcp_seq);
+    unsigned int tcp_ack = ntohl(tcp->ack_seq);
+    printf("Acknowledge number: %u\n", tcp_ack);
+    fprintf(log_file, "Acknowledge number: %u\n", tcp_ack);
 
     if(payload_len > 0){
         printf("\nHTTP content:\n");
         fprintf(log_file, "\nHTTP content:\n");
-        parse_http_response(payload);
-    }
-    else {
-        if(tcp -> tcph_flags & TH_SYN && tcp -> tcph_flags & TH_ACK) {
-            printf("\nThis is SYN-ACK packet\n");
-            fprintf(log_file, "\nThis is SYN-ACK packet\n");
-        }
-        else if(tcp -> tcph_flags & TH_SYN) {
-            printf("\nThis is SYN packet\n");
-            fprintf(log_file, "\nThis is SYN packet\n");
-        }
-        else if(tcp -> tcph_flags & TH_ACK) {
-            printf("\nThis is ACK packet\n");
-            fprintf(log_file, "\nThis is ACK packet\n");
-        }
+        parse_http_response((const char *)payload);
     }
     printf("\nEnd of packet\n");
     fprintf(log_file, "\nEnd of packet\n");
@@ -178,7 +173,20 @@ void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const uns
     count++;
 }
 
-int main() {
+void cleanup(int signum) {
+    printf("\nCaught signal %d, cleaning up...\n", signum);
+    if (log_file != NULL) {
+        fclose(log_file);
+        printf("Log file closed.\n");
+    }
+    if (handle != NULL) {
+        pcap_breakloop(handle);  // Stop pcap loop
+        printf("Stopped pcap loop.\n");
+    }
+    exit(0);  // Exit the program safely
+}
+
+int main(int argc, char *argv[]) {
     log_file = fopen("packet_log.txt", "w");
     if(log_file == NULL) {
         perror("Unable to open log file");
@@ -186,13 +194,14 @@ int main() {
     }
 
     char errbuf[PCAP_ERRBUF_SIZE];
-    char *dev = pcap_lookupdev(errbuf);
+    // The first argument is the device name to sniff on
+    char *dev = argv[1];
     if (dev == NULL) {
         fprintf(stderr, "Couldn't find default device: %s\n", errbuf);
         return(2);
     }
-
-    pcap_t *handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
+    signal(SIGINT, cleanup);
+    handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
     if (handle == NULL) {
         fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
         return(2);
@@ -204,7 +213,7 @@ int main() {
     }
 
     struct bpf_program fp;
-    char filter_exp[] = "tcp port 80";
+    char filter_exp[] = "tcp port 80 and (tcp[13] & 8 != 0)";
     bpf_u_int32 net;
     bpf_u_int32 mask;
 
@@ -224,7 +233,7 @@ int main() {
         return(2);
     }
 
-    pcap_loop(handle, 7, got_packet, NULL);
+    pcap_loop(handle, -1, got_packet, NULL);
     fclose(log_file);
     return 0;
 }
