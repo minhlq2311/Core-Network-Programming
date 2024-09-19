@@ -113,7 +113,7 @@ The program will log packet details to the packet_log.txt file in the current di
 **Example**
 Capture packet on my network interface:
 
-  > sudo ./http_sniffer enp0s3
+  > sudo ./parseHTTP enp0s3
 
 Output:
 
