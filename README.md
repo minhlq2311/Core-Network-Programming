@@ -44,8 +44,8 @@ After successful compilation, to run the program, use:
 - **Destination:** A hostname or an IP address
 
 - **Examples:**
-    Continuously ping google.com and resolve the IP to hostname:
-    > sudo ./ping_with_libnet -t -a google.com
+    Continuously ping google.com:
+    > sudo ./ping_with_libnet -t google.com
 
 
 **2. Ping with Raw Socket**
@@ -67,8 +67,8 @@ After successful compilation, to run the program, use:
 - **Destination:** A hostname or an IP address
 
 - **Examples:**
-Continuously ping google.com and resolve the IP to hostname:
-> sudo ./ping_with_raw_socket -t -a google.com
+Continuously ping google.com:
+> sudo ./ping_with_raw_socket -t google.com
 
 
 ## 2. ParseHTTP and Logging
