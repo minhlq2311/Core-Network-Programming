@@ -15,9 +15,8 @@ This is a custom Ping program written in C, supporting two different methods:
   
 To install `libnet`, run the following command:
 
-```bash
-sudo apt-get install libnet-dev
-```
+> sudo apt-get install libnet-dev
+
 ### 1.2. Directory Structure
 - **ping_with_libnet.c    :**  Source code for ping using libnet
 - **ping_with_raw_socket.c  :** Source code for ping using raw socket
@@ -105,13 +104,13 @@ Make sure you have appropriate privileges (you might need sudo to run pcap progr
 You must specify the network interface that you want to sniff on. For example, to run the program on interface enp0s3, use the following command:
 
 > sudo ./parseHTTP enp0s3
-  
+
 (You can use ifconfig or ip a s to list available interfaces).
 
 The program will log packet details to the packet_log.txt file in the current directory. 
 
 **Example**
-Capture packet on my network interface:
+: Capture packet on my network interface:
 
   > sudo ./parseHTTP enp0s3
 
@@ -134,6 +133,7 @@ Content-Type: text/html
 Content-Length: 1234
 Date: Wed, 19 Sep 2024 12:34:56 GMT
 Last-Modified: Tue, 18 Sep 2024 10:15:30 GMT
+
 Body:
 < html> ... < /html>
 
@@ -141,3 +141,41 @@ End of packet
 
 ### 2.6. Cleanup and Shutdown
 To stop the program, press Ctrl+C. The program will catch the interrupt signal and shutdown by closing the pcap handle and the log file.
+
+## 3. ParseDNS and Logging
+
+The program displays detailed information about DNS packets, including answer records, authoritative records, and additional records. Other information is similar to parseHTTP program.
+
+### 3.1. Requirements
+ The same as requirements for parseHTTP program 
+
+### 3.2. Directory Structure
+- parseDNS.c: Source code for parseDNS
+- dnsHeader.h: Header file containing necessary structure definitions for the program.
+- dns_log.txt: File log DNS packet
+
+### 3.3. Build
+
+To compile the program, use the following command in the terminal:
+
+> gcc -o parseDNS parseDNS.c -lpcap
+
+### 3.4. Run
+
+Similar to parseHTTP
+Make sure you have appropriate privileges (you might need sudo to run pcap programs).
+
+> sudo ./parseDNS [Network Interface]
+
+You must specify the network interface that you want to sniff on. For example, to run the program on interface enp0s3, use the following command:
+
+> sudo ./parseDNS enp0s3
+
+(You can use ifconfig or ip a s to list available interfaces).
+
+
+The program will log packet details to the dns_log.txt file in the current directory.
+
+### 3.5. Cleanup and Shutdown
+
+Same as cleanup and shutdown for parseHTTP, press Ctrl+C to stop the program. 
