@@ -1,4 +1,4 @@
-
+#pragma pack(push, 1)
 struct dnsHeader{
     unsigned short id;
     unsigned short flags;
@@ -12,7 +12,7 @@ struct QUESTION{
     unsigned short qtype;
     unsigned short qclass;
 };
-#pragma pack(push, 1)
+
 struct R_DATA{
     unsigned short type;
     unsigned short _class;
@@ -20,10 +20,6 @@ struct R_DATA{
     unsigned short data_len;
 };
 #pragma pack(pop)
-struct dnsQuery{
-    unsigned char *name;
-    struct QUESTION *ques;
-};
 
 struct dnsRecord{
     unsigned char *name;

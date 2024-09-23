@@ -2,172 +2,330 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
-#include <linux/if_packet.h>
-#include <arpa/inet.h>
 #include <pcap.h>
 #include <netinet/in.h> 
-#include <linux/if_ether.h> 
+#include <arpa/inet.h>
+#include <signal.h>
+#include <net/ethernet.h>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
 
 #define SIZE_ETHERNET 14
-#include "/home/minhlq2311/Documents/Core Net 2.0/packet_header.h"
-#include "dnsHeader.h"
 
 int packetCount = 1;
+FILE *log_file = NULL;
+pcap_t *handle = NULL;
 
-char *readName(unsigned char *reader, unsigned char *buffer, int *count);
+#include "dnsHeader.h"
+char *readName(const unsigned char *reader, const unsigned char *buffer, int *count);
 
-void parseDnsPacket(unsigned char *buffer){
+void parseDnsPacket(const unsigned char *buffer){
     struct dnsHeader *dns = (struct dnsHeader *)buffer;
-    struct dnsRecord ans[10], auth[10], addit[10];
+    struct dnsRecord ans[20], auth[20], addit[20];
     struct QUESTION *qinfo = NULL;
     struct sockaddr_in a;
+    int stop = 0;
 
-    unsigned char *reader, *qname;
-    // Get value of the query name (under DNS format)
-    qname = (unsigned char *)&buffer[sizeof(struct dnsHeader)];
-    // Get the query type and class
-    qinfo = (struct QUESTION *)&buffer[sizeof(struct dnsHeader) + (strlen((const char *)qname) + 1)];
+    const unsigned char *reader = buffer + sizeof(struct dnsHeader);
+
+    // Read the query name
+    unsigned char *qname = readName(reader, buffer, &stop);
+    reader += stop;
+
+    // Read the query info
+    qinfo = (struct QUESTION*)reader;
+    reader += sizeof(struct QUESTION);
+
+    printf("Query Name: %s\n", qname);
+    fprintf(log_file, "Query Name: %s\n", qname);
     printf("Query type: %d\n", ntohs(qinfo->qtype));
+    fprintf(log_file, "Query type: %d\n", ntohs(qinfo->qtype));
     printf("Query class: %d\n", ntohs(qinfo->qclass));
+    fprintf(log_file, "Query class: %d\n", ntohs(qinfo->qclass));
 
-    // Move past the query section
-    dns = (struct dnsHeader *)buffer;
-    reader = &buffer[sizeof(struct dnsHeader) + (strlen((const char*)qname)+1) + sizeof(struct QUESTION)];
+    int i, j;
+    unsigned short type, data_len;
 
-    int i, j, stop;
     // Start reading answers
     for(i = 0; i < ntohs(dns->ansCount); i++) {
         ans[i].name = readName(reader, buffer, &stop);
         reader += stop;
- 
+
         ans[i].resource = (struct R_DATA*)reader;
         reader += sizeof(struct R_DATA);
- 
-        if(ntohs(ans[i].resource->type) == 1) { // IPv4 address
-            ans[i].rdata = (unsigned char*)malloc(ntohs(ans[i].resource->data_len));
- 
-            for(j = 0; j < ntohs(ans[i].resource->data_len); j++) {
-                ans[i].rdata[j] = reader[j];
-            }
- 
-            reader += ntohs(ans[i].resource->data_len);
-        } else {
+
+        type = ntohs(ans[i].resource->type);
+        data_len = ntohs(ans[i].resource->data_len);
+
+        if (type == 1) { // IPv4 address
+            ans[i].rdata = (unsigned char*)malloc(data_len);
+            memcpy(ans[i].rdata, reader, data_len);
+            reader += data_len;
+        } else if (type == 5 || type == 2 || type == 15 || type == 6) {
+            // CNAME, NS, MX, SOA
             ans[i].rdata = readName(reader, buffer, &stop);
             reader += stop;
+        } else if (type == 28) {
+            // IPv6 address
+            ans[i].rdata = (unsigned char*)malloc(data_len);
+            memcpy(ans[i].rdata, reader, data_len);
+            reader += data_len;
+        } else {
+            // Other types, skip the data
+            ans[i].rdata = NULL;
+            reader += data_len;
         }
     }
- 
-    // Read authorities
+
+    // Reading authoritative records
     for(i = 0; i < ntohs(dns->authorCount); i++) {
         auth[i].name = readName(reader, buffer, &stop);
         reader += stop;
- 
+
         auth[i].resource = (struct R_DATA*)reader;
         reader += sizeof(struct R_DATA);
- 
-        auth[i].rdata = readName(reader, buffer, &stop);
-        reader += stop;
-    }
- 
-    // Read additional
-    for(i = 0; i < ntohs(dns->addCount); i++) {
-        addit[i].name = readName(reader, buffer, &stop);
-        reader += stop;
- 
-        addit[i].resource = (struct R_DATA*)reader;
-        reader += sizeof(struct R_DATA);
- 
-        if(ntohs(addit[i].resource->type) == 1) {
-            addit[i].rdata = (unsigned char*)malloc(ntohs(addit[i].resource->data_len));
-            for(j = 0; j < ntohs(addit[i].resource->data_len); j++) {
-                addit[i].rdata[j] = reader[j];
-            }
- 
-            reader += ntohs(addit[i].resource->data_len);
-        } else {
-            addit[i].rdata = readName(reader, buffer, &stop);
+
+        type = ntohs(auth[i].resource->type);
+        data_len = ntohs(auth[i].resource->data_len);
+
+        if (type == 2 || type == 6) { // NS or SOA
+            auth[i].rdata = readName(reader, buffer, &stop);
             reader += stop;
+        } else {
+            auth[i].rdata = NULL;
+            reader += data_len;
         }
     }
- 
+
+    // Reading additional records
+    for(i = 0; i < ntohs(dns->addCount); i++) {
+        // Check if the name is zero-length (root domain)
+        if (*reader == 0) {
+            addit[i].name = strdup("<Root>");
+            reader++;
+            stop = 1;
+        } else {
+            addit[i].name = readName(reader, buffer, &stop);
+            reader += stop;
+        }
+
+        addit[i].resource = (struct R_DATA*)reader;
+        reader += sizeof(struct R_DATA);
+
+        type = ntohs(addit[i].resource->type);
+        data_len = ntohs(addit[i].resource->data_len);
+
+        if (type == 1) { // IPv4 address
+            addit[i].rdata = (unsigned char*)malloc(data_len);
+            memcpy(addit[i].rdata, reader, data_len);
+            reader += data_len;
+        } else if (type == 28) { // IPv6 address
+            addit[i].rdata = (unsigned char*)malloc(data_len);
+            memcpy(addit[i].rdata, reader, data_len);
+            reader += data_len;
+        } else if (type == 41) { // OPT Record
+            // OPT record has a special structure
+            addit[i].rdata = NULL;
+            reader += data_len; // Skip the RDATA
+        } else if (type == 6 || type == 2 || type == 15 || type == 5) {
+            // SOA, NS, MX, CNAME
+            addit[i].rdata = readName(reader, buffer, &stop);
+            reader += stop;
+        } else {
+            // Other types, skip the data
+            addit[i].rdata = NULL;
+            reader += data_len;
+        }
+    }
+
     // Print answers
     printf("\nAnswer Records : %d \n", ntohs(dns->ansCount));
     for(i = 0; i < ntohs(dns->ansCount); i++) {
-        printf("Name : %s ", ans[i].name);
- 
-        if(ntohs(ans[i].resource->type) == 1) { // IPv4 address
-            long *p = (long*)ans[i].rdata;
-            a.sin_addr.s_addr = (*p); // working without ntohl
-            printf("has IPv4 address : %s", inet_ntoa(a.sin_addr));
-        } else if(ntohs(ans[i].resource->type) == 5) {
+		type = ntohs(ans[i].resource->type);
+
+        printf("Type: %d\n", type);
+        fprintf(log_file, "Type: %d\n", type);
+
+        printf("Name: %s ", ans[i].name);
+        fprintf(log_file, "Name: %s ", ans[i].name); 
+
+        if(type == 1) { // IPv4 address
+            struct in_addr addr;
+            memcpy(&addr, ans[i].rdata, sizeof(struct in_addr));
+            printf("has IPv4 address : %s", inet_ntoa(addr));
+            fprintf(log_file, "has IPv4 address : %s", inet_ntoa(addr));
+        } else if(type == 5) {
             // Canonical name for an alias
-            printf("has alias name : %s", ans[i].rdata);
+            printf("has alias name: %s", ans[i].rdata);
+            fprintf(log_file, "has alias name: %s", ans[i].rdata);
+        } else if(type == 2) {
+            // Name server
+            printf("has nameserver: %s", ans[i].rdata);
+            fprintf(log_file, "has nameserver: %s", ans[i].rdata);
+        } else if(type == 28) {
+            // IPv6 address
+            char ipv6_str[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, ans[i].rdata, ipv6_str, sizeof(ipv6_str));
+            printf("has IPv6 address: %s", ipv6_str);
+            fprintf(log_file, "has IPv6 address: %s", ipv6_str);
+        } else {
+            printf("has unknown type");
+            fprintf(log_file, "has unknown type");
         }
- 
+
         printf("\n");
+		fprintf(log_file, "\n");
     }
- 
-    // Print authorities
-    printf("\nAuthoritative Records : %d \n", ntohs(dns->authorCount));
+
+    // Print authoritative records
+    printf("\nAuthoritative Records: %d\n", ntohs(dns->authorCount));
     for(i = 0; i < ntohs(dns->authorCount); i++) {
-        printf("Name : %s ", auth[i].name);
-        if(ntohs(auth[i].resource->type) == 2) {
-            printf("has nameserver : %s", auth[i].rdata);
+		type = ntohs(auth[i].resource->type);
+
+        printf("Type: %d\n", type);
+        fprintf(log_file, "Type: %d\n", type);
+
+        printf("Name: %s ", auth[i].name);
+        fprintf(log_file, "Name: %s ", auth[i].name);
+
+        if(type == 2) { // NS record
+            printf("has nameserver: %s", auth[i].rdata);
+            fprintf(log_file, "has nameserver: %s", auth[i].rdata);
+        } else if(type == 6) { // SOA record
+            printf("has SOA: %s", auth[i].rdata);
+            fprintf(log_file, "has SOA: %s", auth[i].rdata);
+        } else {
+            printf("has unknown type");
+            fprintf(log_file, "has unknown type");
         }
         printf("\n");
+		fprintf(log_file, "\n");
     }
- 
-    // Print additional resource records
+
+    // Print additional records
     printf("\nAdditional Records : %d \n", ntohs(dns->addCount));
     for(i = 0; i < ntohs(dns->addCount); i++) {
-        printf("Name : %s ", addit[i].name);
-        if(ntohs(addit[i].resource->type) == 1) {
-            long *p = (long*)addit[i].rdata;
-            a.sin_addr.s_addr = (*p);
-            printf("has IPv4 address : %s", inet_ntoa(a.sin_addr));
+		type = ntohs(addit[i].resource->type);
+
+        printf("Type: %d\n", type);
+        fprintf(log_file, "Type: %d\n", type);
+
+        printf("Name: %s ", addit[i].name);
+        fprintf(log_file, "Name: %s ", addit[i].name);
+
+        if(type == 1) { // IPv4 address
+            struct in_addr addr;
+            memcpy(&addr, addit[i].rdata, sizeof(struct in_addr));
+            printf("has IPv4 address: %s", inet_ntoa(addr));
+            fprintf(log_file, "has IPv4 address: %s", inet_ntoa(addr));
+        } else if(type == 28) { // IPv6 address
+            char ipv6_str[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, addit[i].rdata, ipv6_str, sizeof(ipv6_str));
+            printf("has IPv6 address: %s", ipv6_str);
+            fprintf(log_file, "has IPv6 address: %s", ipv6_str);
+        } else if(type == 41) { // OPT Record
+            // Extract OPT record details
+            unsigned short opt_payload_size = ntohs(addit[i].resource->_class);
+            unsigned char extended_rcode = (ntohl(addit[i].resource->ttl) >> 24) & 0xFF;
+            unsigned char edns_version = (ntohl(addit[i].resource->ttl) >> 16) & 0xFF;
+            // The Z field is in the lower 16 bits of TTL
+            unsigned short z = ntohl(addit[i].resource->ttl) & 0xFFFF;
+
+            printf("has OPT record: payload size %u, extended RCODE %u, EDNS version %u", opt_payload_size, extended_rcode, edns_version);
+            fprintf(log_file, "has OPT record: payload size %u, extended RCODE %u, EDNS version %u", opt_payload_size, extended_rcode, edns_version);
+        } else if(type == 6 || type == 2 || type == 15 || type == 5) {
+            // SOA, NS, MX, CNAME
+            printf("has data: %s\n", addit[i].rdata);
+            fprintf(log_file, "has data: %s\n", addit[i].rdata);
+        } else {
+            printf("has unknown type");
+            fprintf(log_file, "has unknown type");
         }
         printf("\n");
+		fprintf(log_file, "\n");
+    }
+
+    // Free allocated memory
+    free(qname);
+    for(i = 0; i < ntohs(dns->ansCount); i++) {
+        free(ans[i].name);
+        if(ans[i].rdata != NULL)
+            free(ans[i].rdata);
+    }
+    for(i = 0; i < ntohs(dns->authorCount); i++) {
+        free(auth[i].name);
+        if(auth[i].rdata != NULL)
+            free(auth[i].rdata);
+    }
+    for(i = 0; i < ntohs(dns->addCount); i++) {
+        free(addit[i].name);
+        if(addit[i].rdata != NULL)
+            free(addit[i].rdata);
     }
 }
 
 void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const unsigned char *packet){
-    struct ethernetHeader *eth = (struct ethernetHeader *)packet;
+    struct ether_header *eth = (struct ether_header *)packet;
 
-    struct ipHeader *ip = (struct ipHeader *)(packet + SIZE_ETHERNET);
+    struct ip *ip = (struct ip *)(packet + SIZE_ETHERNET);
 
-    size_t ip_len = (ip->iph_ihl) * 4;
-    struct udpHeader *udp = (struct udpHeader *)(packet + 14 + ip_len);
+    size_t ip_len = ip->ip_hl * 4;
+    struct udphdr *udp = (struct udphdr *)(packet + SIZE_ETHERNET + ip_len);
 
     size_t udp_len = 8;
-    
-    unsigned char *dns = (unsigned char *)(packet + 14 + ip_len + udp_len);
 
-    printf("\nPacket number %d:\n", packetCount++);
+    const unsigned char *dns = packet + SIZE_ETHERNET + ip_len + udp_len;
 
-    printf("Source IP: %s\n", inet_ntoa(ip->iph_sourceip));
-    printf("Destination IP: %s\n", inet_ntoa(ip->iph_destip));
+    printf("\nPacket number %d:\n", packetCount);
+    fprintf(log_file, "\nPacket number %d:\n", packetCount);
 
-    printf("Source Port: %d\n", ntohs(udp->udph_srcport));
-    printf("Destination Port: %d\n", ntohs(udp->udph_destport));
-    printf("Length: %d\n", ntohs(udp->udph_len));
+    printf("Source IP: %s\n", inet_ntoa(ip->ip_src));
+    fprintf(log_file, "Source IP: %s\n", inet_ntoa(ip->ip_src));
+    printf("Destination IP: %s\n", inet_ntoa(ip->ip_dst));
+    fprintf(log_file, "Destination IP: %s\n", inet_ntoa(ip->ip_dst));
+
+    printf("Source Port: %d\n", ntohs(udp->uh_sport));
+    fprintf(log_file, "Source Port: %d\n", ntohs(udp->uh_sport));
+    printf("Destination Port: %d\n", ntohs(udp->uh_dport));
+    fprintf(log_file, "Destination Port: %d\n", ntohs(udp->uh_dport));
+    printf("Length: %d\n", ntohs(udp->uh_ulen));
+    fprintf(log_file, "Length: %d\n", ntohs(udp->uh_ulen));
 
     parseDnsPacket(dns);
     printf("\nEnd of packet\n");
+
+    packetCount++;
+    sleep(1);
 }
-int main(){
+
+void cleanup(int signum) {
+    printf("\nCaught signal %d, cleaning up...\n", signum);
+    if (log_file != NULL) {
+        fclose(log_file);
+        printf("Log file closed.\n");
+    }
+    if (handle != NULL) {
+        pcap_breakloop(handle);  // Stop pcap loop
+        printf("Stopped pcap loop.\n");
+    }
+    exit(0);  // Exit the program safely
+}
+
+int main(int argc, char *argv[]){
+    log_file = fopen("dns_log.txt", "w");
+    if (log_file == NULL) {
+        perror("Failed to open log file");
+        return 1;
+    }
     char errbuf[PCAP_ERRBUF_SIZE];
     // Getting the network interface name
-    char *dev = NULL;
-    dev = pcap_lookupdev(errbuf);
-    if (dev == NULL) {
-        fprintf(stderr, "Couldn't find default device: %s\n", errbuf);
-        return(2);
+    if(argc < 2){
+        printf("Usage: parseDNS [interface]\n");
+        return 1;
     }
+    char *dev = argv[1];
+    signal(SIGINT, cleanup);
     // Open the session 
-    pcap_t *handle = NULL;
     handle = pcap_open_live(dev, 65536, 1, 1000, errbuf);
     if (handle == NULL) {
         fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
@@ -199,59 +357,83 @@ int main(){
         return(2);
     }
     // Start capturing packets
-    pcap_loop(handle, 2, got_packet, NULL);
+    pcap_loop(handle, -1, got_packet, NULL);
 }
 
-char *readName(unsigned char* reader,unsigned char* buffer,int* count)
+char *readName(const unsigned char *reader, const unsigned char *buffer, int *count)
 {
-    unsigned char *name;
-    unsigned int p=0,jumped=0,offset;
-    int i , j;
- 
-    *count = 1;
-    name = (unsigned char*)malloc(256);
- 
-    name[0]='\0';
- 
-    //read the names in 3www6google3com format
-    while(*reader!=0)
+    const unsigned char *name_ptr = reader;
+    unsigned char name[256];
+    int name_pos = 0;
+    int jumped = 0;
+    int offset;
+    int num_bytes = 0;
+
+    *count = 0;
+
+    while(1)
     {
-        if(*reader>=192)
+        if(*name_ptr == 0)
         {
-            offset = (*reader)*256 + *(reader+1) - 49152; //49152 = 11000000 00000000 ;)
-            reader = buffer + offset - 1;
-            jumped = 1; //we have jumped to another location so counting wont go up!
+            // End of name
+            if(!jumped)
+            {
+                num_bytes++;
+            }
+            name_ptr++;
+            break;
+        }
+
+        if((*name_ptr & 0xC0) == 0xC0)
+        {
+            // Compressed name
+            if(!jumped)
+            {
+                num_bytes += 2;
+            }
+            offset = ((*name_ptr & 0x3F) << 8) | *(name_ptr + 1);
+            name_ptr = buffer + offset;
+            jumped = 1;
         }
         else
         {
-            name[p++]=*reader;
-        }
- 
-        reader = reader+1;
- 
-        if(jumped==0)
-        {
-            *count = *count + 1; //if we havent jumped to another location then we can count up
+            // Normal label
+            int len = *name_ptr;
+            name_ptr++;
+            if(!jumped)
+            {
+                num_bytes += (len + 1);
+            }
+            memcpy(&name[name_pos], name_ptr - 1, len + 1);
+            name_pos += len + 1;
+            name_ptr += len;
         }
     }
- 
-    name[p]='\0'; //string complete
-    if(jumped==1)
+
+    name[name_pos] = '\0';
+    *count = num_bytes;
+
+    // Convert name to readable format
+    unsigned char *parsed_name = (unsigned char*)malloc(256);
+    int i = 0, j = 0;
+    while(i < name_pos)
     {
-        *count = *count + 1; //number of steps we actually moved forward in the packet
-    }
- 
-    //now convert 3www6google3com0 to www.google.com
-    for(i=0;i<(int)strlen((const char*)name);i++) 
-    {
-        p=name[i];
-        for(j=0;j<(int)p;j++) 
+        int len = name[i];
+        for(int k = 0; k < len; k++)
         {
-            name[i]=name[i+1];
-            i=i+1;
+            parsed_name[j++] = name[i + k + 1];
         }
-        name[i]='.';
+        parsed_name[j++] = '.';
+        i += len + 1;
     }
-    name[i-1]='\0'; //remove the last dot
-    return name;
+    if(j > 0)
+    {
+        parsed_name[j - 1] = '\0'; // Remove the last dot
+    }
+    else
+    {
+        parsed_name[0] = '\0';
+    }
+
+    return parsed_name;
 }
