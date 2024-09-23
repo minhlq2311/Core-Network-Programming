@@ -153,6 +153,7 @@ The program displays detailed information about DNS packets, including answer re
 - parseDNS.c: Source code for parseDNS
 - dnsHeader.h: Header file containing necessary structure definitions for the program.
 - dns_log.txt: File log DNS packet
+- dns_libnet.c: Source code if you want to test DNS query
 
 ### 3.3. Build
 
