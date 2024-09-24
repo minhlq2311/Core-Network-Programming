@@ -18,6 +18,126 @@ pcap_t *handle = NULL;
 
 #include "dnsHeader.h"
 char *readName(const unsigned char *reader, const unsigned char *buffer, int *count);
+void parseDnsPacket(const unsigned char *buffer);
+void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const unsigned char *packet);
+
+void cleanup(int signum) {
+    printf("\nCaught signal %d, cleaning up...\n", signum);
+    if (log_file != NULL) {
+        fclose(log_file);
+        printf("Log file closed.\n");
+    }
+    if (handle != NULL) {
+        pcap_breakloop(handle);  // Stop pcap loop
+        printf("Stopped pcap loop.\n");
+    }
+    exit(0);  // Exit the program safely
+}
+
+int main(int argc, char *argv[]){
+    log_file = fopen("dns_log.txt", "w");
+    if (log_file == NULL) {
+        perror("Failed to open log file");
+        return 1;
+    }
+    char errbuf[PCAP_ERRBUF_SIZE];
+    // Getting the network interface name
+    if(argc < 2){
+        printf("Usage: parseDNS [interface]\n");
+        return 1;
+    }
+    char *dev = argv[1];
+    signal(SIGINT, cleanup);
+    // Open the session 
+    handle = pcap_open_live(dev, 65536, 1, 1000, errbuf);
+    if (handle == NULL) {
+        fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
+        return(2);
+    }
+    // Check if the device provides Ethernet headers
+    if(pcap_datalink(handle) != DLT_EN10MB){
+        fprintf(stderr, "Device %s doesn't provide Ethernet headers - not supported\n", dev);
+        return(2);
+    }
+    // The filter expression for DNS packets
+    struct bpf_program fp;
+    char filter_exp[] = "udp port 53";
+    bpf_u_int32 net;
+    bpf_u_int32 mask;
+    // Get network number and mask 
+    if (pcap_lookupnet(dev, &net, &mask, errbuf) == -1) {
+        fprintf(stderr, "Can't get netmask for device %s\n", dev);
+        net = 0;
+        mask = 0;
+    }
+    // Compile filter
+    if(pcap_compile(handle, &fp, filter_exp, 0, net) == -1){
+        fprintf(stderr, "Couldn't parse filter %s: %s\n", filter_exp, pcap_geterr(handle));
+        return(2);
+    }
+    // Apply filter
+    if(pcap_setfilter(handle, &fp) == -1){
+        fprintf(stderr, "Couldn't install filter %s: %s\n", filter_exp, pcap_geterr(handle));
+        return(2);
+    }
+    // Start capturing packets
+    pcap_loop(handle, -1, got_packet, NULL);
+}
+
+char* readName(const unsigned char* reader,const unsigned char* buffer,int* count)
+{
+	unsigned char *name;
+	unsigned int p=0,jumped=0,offset;
+	int i , j;
+
+	*count = 1;
+	name = (unsigned char*)malloc(256);
+
+	name[0]='\0';
+
+	//read the names in 3www6google3com format
+	while(*reader!=0)
+	{
+		if(*reader>=192)
+		{
+			offset = (*reader)*256 + *(reader+1) - 49152; //49152 = 11000000 00000000
+			reader = buffer + offset - 1;
+			jumped = 1; //we have jumped to another location so counting wont go up
+		}
+		else
+		{
+			name[p++]=*reader;
+		}
+
+		reader = reader+1;
+
+		if(jumped==0)
+		{
+			*count = *count + 1; //if we havent jumped to another location then we can count up
+		}
+	}
+
+	name[p]='\0'; //string complete
+	if(jumped==1)
+	{
+		*count = *count + 1; //number of steps we actually moved forward in the packet
+	}
+
+	//now convert 3www6google3com0 to www.google.com
+	for(i=0;i<(int)strlen((const char*)name);i++) 
+	{
+		p=name[i];
+		for(j=0;j<(int)p;j++) 
+		{
+			name[i]=name[i+1];
+			i=i+1;
+		}
+		name[i]='.';
+	}
+	name[i-1]='\0'; //remove the last dot
+	return name;
+}
+
 
 void parseDnsPacket(const unsigned char *buffer){
     struct dnsHeader *dns = (struct dnsHeader *)buffer;
@@ -296,144 +416,4 @@ void got_packet(unsigned char *args, const struct pcap_pkthdr *header, const uns
 
     packetCount++;
     sleep(1);
-}
-
-void cleanup(int signum) {
-    printf("\nCaught signal %d, cleaning up...\n", signum);
-    if (log_file != NULL) {
-        fclose(log_file);
-        printf("Log file closed.\n");
-    }
-    if (handle != NULL) {
-        pcap_breakloop(handle);  // Stop pcap loop
-        printf("Stopped pcap loop.\n");
-    }
-    exit(0);  // Exit the program safely
-}
-
-int main(int argc, char *argv[]){
-    log_file = fopen("dns_log.txt", "w");
-    if (log_file == NULL) {
-        perror("Failed to open log file");
-        return 1;
-    }
-    char errbuf[PCAP_ERRBUF_SIZE];
-    // Getting the network interface name
-    if(argc < 2){
-        printf("Usage: parseDNS [interface]\n");
-        return 1;
-    }
-    char *dev = argv[1];
-    signal(SIGINT, cleanup);
-    // Open the session 
-    handle = pcap_open_live(dev, 65536, 1, 1000, errbuf);
-    if (handle == NULL) {
-        fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
-        return(2);
-    }
-    // Check if the device provides Ethernet headers
-    if(pcap_datalink(handle) != DLT_EN10MB){
-        fprintf(stderr, "Device %s doesn't provide Ethernet headers - not supported\n", dev);
-        return(2);
-    }
-    struct bpf_program fp;
-    char filter_exp[] = "udp port 53";
-    bpf_u_int32 net;
-    bpf_u_int32 mask;
-    // Get network number and mask 
-    if (pcap_lookupnet(dev, &net, &mask, errbuf) == -1) {
-        fprintf(stderr, "Can't get netmask for device %s\n", dev);
-        net = 0;
-        mask = 0;
-    }
-    // Compile filter
-    if(pcap_compile(handle, &fp, filter_exp, 0, net) == -1){
-        fprintf(stderr, "Couldn't parse filter %s: %s\n", filter_exp, pcap_geterr(handle));
-        return(2);
-    }
-    // Apply filter
-    if(pcap_setfilter(handle, &fp) == -1){
-        fprintf(stderr, "Couldn't install filter %s: %s\n", filter_exp, pcap_geterr(handle));
-        return(2);
-    }
-    // Start capturing packets
-    pcap_loop(handle, -1, got_packet, NULL);
-}
-
-char *readName(const unsigned char *reader, const unsigned char *buffer, int *count)
-{
-    const unsigned char *name_ptr = reader;
-    unsigned char name[256];
-    int name_pos = 0;
-    int jumped = 0;
-    int offset;
-    int num_bytes = 0;
-
-    *count = 0;
-
-    while(1)
-    {
-        if(*name_ptr == 0)
-        {
-            // End of name
-            if(!jumped)
-            {
-                num_bytes++;
-            }
-            name_ptr++;
-            break;
-        }
-
-        if((*name_ptr & 0xC0) == 0xC0)
-        {
-            // Compressed name
-            if(!jumped)
-            {
-                num_bytes += 2;
-            }
-            offset = ((*name_ptr & 0x3F) << 8) | *(name_ptr + 1);
-            name_ptr = buffer + offset;
-            jumped = 1;
-        }
-        else
-        {
-            // Normal label
-            int len = *name_ptr;
-            name_ptr++;
-            if(!jumped)
-            {
-                num_bytes += (len + 1);
-            }
-            memcpy(&name[name_pos], name_ptr - 1, len + 1);
-            name_pos += len + 1;
-            name_ptr += len;
-        }
-    }
-
-    name[name_pos] = '\0';
-    *count = num_bytes;
-
-    // Convert name to readable format
-    unsigned char *parsed_name = (unsigned char*)malloc(256);
-    int i = 0, j = 0;
-    while(i < name_pos)
-    {
-        int len = name[i];
-        for(int k = 0; k < len; k++)
-        {
-            parsed_name[j++] = name[i + k + 1];
-        }
-        parsed_name[j++] = '.';
-        i += len + 1;
-    }
-    if(j > 0)
-    {
-        parsed_name[j - 1] = '\0'; // Remove the last dot
-    }
-    else
-    {
-        parsed_name[0] = '\0';
-    }
-
-    return parsed_name;
 }
